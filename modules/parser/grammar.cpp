@@ -2,14 +2,13 @@ module;
 
 #include <lexy/callback.hpp>
 #include <lexy/dsl.hpp>
+#include <lexy_ext/report_error.hpp>
 
 export module Atem.Parser.Grammar;
 
 // Grammar for Atem language
-export namespace atemc::grammar {
+export namespace atem::grammar {
     namespace dsl = lexy::dsl;
-
-    constexpr auto oneline_comment = LEXY_LIT("//") >> dsl::until(dsl::ascii::newline);
 
     constexpr auto identifier = dsl::identifier(dsl::unicode::xid_start_underscore, dsl::unicode::xid_continue);
     constexpr auto keyword_and = LEXY_KEYWORD("and", identifier);
@@ -54,6 +53,10 @@ export namespace atemc::grammar {
     constexpr auto keyword_while = LEXY_KEYWORD("while", identifier);
     constexpr auto keyword_with = LEXY_KEYWORD("with", identifier);
 
+    constexpr auto whitespace_or_comment = dsl::ascii::space | dsl::ascii::newline |
+                                           LEXY_LIT("//") >> dsl::until(dsl::newline).or_eof() |
+                                           LEXY_LIT("/*") >> dsl::until(LEXY_LIT("*/"));
+
     struct Identifier {
         static constexpr auto rule = [] {
             // An identifier is
@@ -72,4 +75,192 @@ export namespace atemc::grammar {
                     .reserve_containing(LEXY_LIT("__"));
         }();
     };
-} // namespace atemc::grammar
+
+    struct BoolLiteralExpression {
+        static constexpr auto rule = keyword_true | keyword_false;
+    };
+
+    struct IntLiteralExpression {
+        struct BinaryIntLiteralExpression {
+            static constexpr auto rule = LEXY_LIT("0b") >> dsl::digits<dsl::binary>.sep(dsl::digit_sep_underscore);
+        };
+
+        struct OctalIntLiteralExpression {
+            static constexpr auto rule = LEXY_LIT("0o") >> dsl::digits<dsl::octal>.sep(dsl::digit_sep_underscore);
+        };
+
+        struct DecimalIntLiteralExpression {
+            static constexpr auto rule = dsl::digits<dsl::decimal>.sep(dsl::digit_sep_underscore);
+        };
+
+        struct HexadecimalIntLiteralExpression {
+            static constexpr auto rule = LEXY_LIT("0x") >> dsl::digits<dsl::hex>.sep(dsl::digit_sep_underscore);
+        };
+
+        static constexpr auto rule = dsl::peek(dsl::lit_c<'-'> / dsl::digit<>) >>
+                                     (dsl::p<BinaryIntLiteralExpression> | dsl::p<OctalIntLiteralExpression> |
+                                      dsl::p<HexadecimalIntLiteralExpression> | dsl::p<DecimalIntLiteralExpression>);
+    };
+
+    struct FloatLiteralExpression {
+        struct IntegralPart {
+            static constexpr auto rule = dsl::digits<dsl::decimal>.sep(dsl::digit_sep_underscore);
+        };
+
+        struct FractionPart {
+            static constexpr auto rule = dsl::lit_c<'.'> >> dsl::digits<dsl::decimal>.sep(dsl::digit_sep_underscore);
+        };
+
+        struct ExponentialPart {
+            static constexpr auto rule = [] {
+                constexpr auto exp_char = dsl::lit_c<'e'> | dsl::lit_c<'E'>;
+                return exp_char >> dsl::sign + dsl::digits<dsl::decimal>.sep(dsl::digit_sep_underscore);
+            }();
+        };
+
+        static constexpr auto rule = dsl::peek(dsl::lit_c<'-'> / dsl::digit<>) >>
+                                     dsl::p<IntegralPart> + dsl::p<FractionPart> + dsl::opt(dsl::p<ExponentialPart>);
+    };
+
+    struct StringLiteralExpression {
+        struct InvalidCharError {
+            static consteval auto name() {
+                return "invalid character in string literal";
+            }
+        };
+
+        static constexpr auto escape_sequences = lexy::symbol_table<char>
+            .map<'"'>('"')
+            .map<'\\'>('\\')
+            .map<'/'>('/')
+            .map<'b'>('\b')
+            .map<'f'>('\f')
+            .map<'n'>('\n')
+            .map<'r'>('\r')
+            .map<'t'>('\t');
+
+        struct CodePointId {
+            static constexpr auto rule = LEXY_LIT("u") >> dsl::code_unit_id<lexy::utf16_encoding, 4>;
+        };
+
+        static constexpr auto rule = [] {
+            constexpr auto code_point = (-dsl::unicode::control).error<InvalidCharError>;
+            constexpr auto escape = dsl::backslash_escape.symbol<escape_sequences>().rule(dsl::p<CodePointId>);
+
+            return dsl::quoted.limit(dsl::ascii::newline)(code_point, escape);
+        }();
+    };
+
+    struct NullLiteralExpression {
+        static constexpr auto rule = keyword_null;
+    };
+
+    struct UndefinedLiteralExpression {
+        static constexpr auto rule = keyword_undefined;
+    };
+
+    struct UnitLiteralExpression {
+        static constexpr auto rule = LEXY_LIT("()");
+    };
+
+    struct LiteralExpression {
+        static constexpr auto rule = dsl::p<BoolLiteralExpression> | dsl::p<IntLiteralExpression> |
+                                     dsl::p<FloatLiteralExpression> | dsl::p<StringLiteralExpression> |
+                                     dsl::p<NullLiteralExpression> | dsl::p<UndefinedLiteralExpression> |
+                                     dsl::p<UnitLiteralExpression>;
+    };
+
+    struct BoolTypeExpression {
+        static constexpr auto rule = keyword_bool;
+    };
+
+    struct IntTypeExpression {
+        static constexpr auto rule =
+                LEXY_LIT("Int") >> dsl::integer<std::uint64_t>(dsl::digits<>.no_leading_zero()) | keyword_isize;
+    };
+
+    struct UIntTypeExpression {
+        static constexpr auto rule =
+                LEXY_LIT("UInt") >> dsl::integer<std::uint64_t>(dsl::digits<>.no_leading_zero()) | keyword_usize;
+    };
+
+    struct FloatTypeExpression {
+        static constexpr auto rule =
+                keyword_float16 | keyword_float32 | keyword_float64 | keyword_float80 | keyword_float128;
+    };
+
+    struct NoreturnTypeExpression {
+        static constexpr auto rule = keyword_noreturn;
+    };
+
+    struct UnitTypeExpression {
+        static constexpr auto rule = keyword_unit;
+    };
+
+    struct StringTypeExpression {
+        static constexpr auto rule = keyword_string;
+    };
+
+    struct RuneTypeExpression {
+        static constexpr auto rule = keyword_rune;
+    };
+
+    struct BuiltinTypeExpression {
+        static constexpr auto rule = dsl::p<BoolTypeExpression> | dsl::p<IntTypeExpression> |
+                                     dsl::p<UIntTypeExpression> | dsl::p<FloatTypeExpression> |
+                                     dsl::p<NoreturnTypeExpression> | dsl::p<UnitTypeExpression> |
+                                     dsl::p<StringTypeExpression> | dsl::p<RuneTypeExpression>;
+    };
+
+    struct IdentifierTypeExpression {
+        static constexpr auto rule = identifier;
+    };
+
+    struct TypeExpression {
+        static constexpr auto rule = dsl::p<BuiltinTypeExpression> | dsl::p<IdentifierTypeExpression>;
+    };
+
+    struct Expression;
+
+    struct BlockExpression {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = dsl::curly_bracketed.opt_list(dsl::recurse<Expression>);
+    };
+
+    struct Expression {
+        static constexpr auto rule = dsl::p<TypeExpression> | dsl::p<LiteralExpression>;
+    };
+
+    struct FunctionArgumentList {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = [] {
+            constexpr auto argument_name = identifier;
+            [[maybe_unused]] constexpr auto argument_type = dsl::p<TypeExpression>;
+            [[maybe_unused]] constexpr auto function_argument = argument_name + LEXY_LIT(":") + argument_type;
+
+            return dsl::parenthesized.opt_list(function_argument, dsl::sep(dsl::comma));
+        }();
+    };
+
+    struct FunctionDeclaration {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = [] {
+            constexpr auto function_name = identifier;
+            constexpr auto arguments = dsl::p<FunctionArgumentList>;
+            constexpr auto return_type = dsl::p<TypeExpression>;
+            constexpr auto body = dsl::p<BlockExpression>;
+
+            return dsl::position + function_name + LEXY_LIT(":") + keyword_function + arguments +
+                   dsl::opt(LEXY_LIT("->") >> return_type) + LEXY_LIT("=") + body;
+        }();
+    };
+
+    struct Declaration {
+        static constexpr auto rule = dsl::p<FunctionDeclaration>;
+    };
+
+    struct SourceFile {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = dsl::terminator(dsl::eof).list(dsl::p<FunctionDeclaration>);
+    };
+} // namespace atem::grammar

@@ -1,13 +1,29 @@
 module;
 
-#include <iostream>
+#include <print>
 
 #include <libassert/assert.hpp>
 
+#include <lexy/input/file.hpp>
+#include <lexy/action/trace.hpp>
+
 export module Atem.Main;
 
-export auto main() -> int {
-    std::cout << "Hello, World!" << std::endl;
-    DEBUG_ASSERT(false);
+import Atem.AST;
+import Atem.Parser.Grammar;
+
+export auto main(int const argc, char** argv) -> int {
+    if (argc < 2) {
+        std::println("usage: %s <filename>", argv[0]);
+        return 1;
+    }
+
+    auto file = lexy::read_file<lexy::utf8_encoding>(argv[1]);
+    if (not file) {
+        std::println("file {} not found", argv[1]);
+        return 1;
+    }
+
+    lexy::trace<atem::grammar::SourceFile>(stdout, file.buffer());
     return 0;
 }

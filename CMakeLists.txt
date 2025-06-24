@@ -25,6 +25,12 @@ target_sources(
         FILE_SET atem_exp_cpp_modules TYPE CXX_MODULES FILES
         modules/main/main.cpp
         modules/parser/grammar.cpp
+        modules/ast/ast.cpp
+        modules/ast/expr.cpp
+        modules/ast/literal_expr.cpp
+        modules/ast/utils.cpp
+        modules/ast/decl.cpp
+        modules/mp/mp.cppm
 )
 
 target_compile_features(atemcproto PUBLIC cxx_std_26)
@@ -32,9 +38,10 @@ target_compile_features(atemcproto PUBLIC cxx_std_26)
 target_link_libraries(
     atemcproto
     PRIVATE
-    cpptrace::cpptrace
-    libassert::assert
-    foonathan::lexy
+        stdc++exp
+        cpptrace::cpptrace
+        libassert::assert
+        foonathan::lexy
 )
 
 if(WIN32)
