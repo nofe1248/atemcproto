@@ -62,10 +62,19 @@ export namespace atem::ast::utils {
             return this->value.visit(OverloadSet(std::forward<Types>(args)..., [](auto &&) {}));
         }
 
+        [[nodiscard]] constexpr auto toString() const -> std::string {
+            return this->value.visit([]<typename T>(T &&value) { return std::forward<T>(value).toString(); });
+        }
+
         template<typename T>
             requires contain_type_v<T, VariantTypes...>
         static constexpr auto make(T &&t) -> Derived {
             return Derived{std::forward<T>(t)};
         }
     };
+
+    template<typename T>
+    constexpr auto astToString(T &&node) -> std::string {
+        return std::forward<T>(node).toString();
+    }
 } // namespace atem::ast::utils
