@@ -6,6 +6,17 @@ module;
 
 export module Atem.Parser.Grammar;
 
+// Custom Parsing Errors
+export namespace atem::grammar::error {
+    struct UnexpectedTrailingComma {
+        static constexpr auto name = "unexpected trailing comma in the list";
+    };
+
+    struct InvalidCharInString {
+        static constexpr auto name = "invalid character in string literal";
+    };
+} // namespace atem::grammar::error
+
 // Grammar for Atem language
 export namespace atem::grammar {
     namespace dsl = lexy::dsl;
@@ -76,59 +87,37 @@ export namespace atem::grammar {
         }();
     };
 
-    struct BoolLiteralExpression {
+    struct BoolLiteralExpression : lexy::token_production {
         static constexpr auto rule = keyword_true | keyword_false;
     };
 
-    struct IntLiteralExpression {
-        struct BinaryIntLiteralExpression {
-            static constexpr auto rule = LEXY_LIT("0b") >> dsl::digits<dsl::binary>.sep(dsl::digit_sep_underscore);
+    struct IntLiteralExpression : lexy::token_production {
+        struct DecimalInteger : lexy::transparent_production {
+            static constexpr auto rule = dsl::sign + dsl::digits<dsl::decimal>.sep(dsl::digit_sep_underscore);
         };
+        static constexpr auto rule = [] {
+            constexpr auto binary_integer = LEXY_LIT("0b") >> dsl::digits<dsl::binary>.sep(dsl::digit_sep_underscore);
+            constexpr auto octal_integer = LEXY_LIT("0o") >> dsl::digits<dsl::octal>.sep(dsl::digit_sep_underscore);
+            constexpr auto decimal_integer =
+                    dsl::peek(dsl::lit_c<'-'> / dsl::lit_c<'+'> / dsl::digit<>) >> dsl::p<DecimalInteger>;
+            constexpr auto hexadecimal_integer = LEXY_LIT("0x") >> dsl::digits<dsl::hex>.sep(dsl::digit_sep_underscore);
 
-        struct OctalIntLiteralExpression {
-            static constexpr auto rule = LEXY_LIT("0o") >> dsl::digits<dsl::octal>.sep(dsl::digit_sep_underscore);
-        };
-
-        struct DecimalIntLiteralExpression {
-            static constexpr auto rule = dsl::digits<dsl::decimal>.sep(dsl::digit_sep_underscore);
-        };
-
-        struct HexadecimalIntLiteralExpression {
-            static constexpr auto rule = LEXY_LIT("0x") >> dsl::digits<dsl::hex>.sep(dsl::digit_sep_underscore);
-        };
-
-        static constexpr auto rule = dsl::peek(dsl::lit_c<'-'> / dsl::digit<>) >>
-                                     (dsl::p<BinaryIntLiteralExpression> | dsl::p<OctalIntLiteralExpression> |
-                                      dsl::p<HexadecimalIntLiteralExpression> | dsl::p<DecimalIntLiteralExpression>);
+            return binary_integer | octal_integer | hexadecimal_integer | decimal_integer;
+        }();
     };
 
-    struct FloatLiteralExpression {
-        struct IntegralPart {
-            static constexpr auto rule = dsl::digits<dsl::decimal>.sep(dsl::digit_sep_underscore);
-        };
+    struct FloatLiteralExpression : lexy::token_production {
+        static constexpr auto rule = [] {
+            constexpr auto integral_part = dsl::sign + dsl::digits<>;
+            constexpr auto fraction_part = dsl::period >> dsl::digits<>;
+            constexpr auto exponent_part = dsl::lit_c<'e'> / dsl::lit_c<'E'> >> dsl::sign + dsl::digits<>;
 
-        struct FractionPart {
-            static constexpr auto rule = dsl::lit_c<'.'> >> dsl::digits<dsl::decimal>.sep(dsl::digit_sep_underscore);
-        };
-
-        struct ExponentialPart {
-            static constexpr auto rule = [] {
-                constexpr auto exp_char = dsl::lit_c<'e'> | dsl::lit_c<'E'>;
-                return exp_char >> dsl::sign + dsl::digits<dsl::decimal>.sep(dsl::digit_sep_underscore);
-            }();
-        };
-
-        static constexpr auto rule = dsl::peek(dsl::lit_c<'-'> / dsl::digit<>) >>
-                                     dsl::p<IntegralPart> + dsl::p<FractionPart> + dsl::opt(dsl::p<ExponentialPart>);
+            constexpr auto float_literal = dsl::token(integral_part + fraction_part + dsl::if_(exponent_part));
+            return dsl::capture(float_literal);
+        }();
     };
 
-    struct StringLiteralExpression {
-        struct InvalidCharError {
-            static consteval auto name() {
-                return "invalid character in string literal";
-            }
-        };
-
+    struct StringLiteralExpression : lexy::token_production {
         static constexpr auto escape_sequences = lexy::symbol_table<char>
             .map<'"'>('"')
             .map<'\\'>('\\')
@@ -144,28 +133,28 @@ export namespace atem::grammar {
         };
 
         static constexpr auto rule = [] {
-            constexpr auto code_point = (-dsl::unicode::control).error<InvalidCharError>;
+            constexpr auto code_point = (-dsl::unicode::control).error<error::InvalidCharInString>;
             constexpr auto escape = dsl::backslash_escape.symbol<escape_sequences>().rule(dsl::p<CodePointId>);
 
             return dsl::quoted.limit(dsl::ascii::newline)(code_point, escape);
         }();
     };
 
-    struct NullLiteralExpression {
+    struct NullLiteralExpression : lexy::token_production {
         static constexpr auto rule = keyword_null;
     };
 
-    struct UndefinedLiteralExpression {
+    struct UndefinedLiteralExpression : lexy::token_production {
         static constexpr auto rule = keyword_undefined;
     };
 
-    struct UnitLiteralExpression {
+    struct UnitLiteralExpression : lexy::token_production {
         static constexpr auto rule = LEXY_LIT("()");
     };
 
     struct LiteralExpression {
-        static constexpr auto rule = dsl::p<BoolLiteralExpression> | dsl::p<IntLiteralExpression> |
-                                     dsl::p<FloatLiteralExpression> | dsl::p<StringLiteralExpression> |
+        static constexpr auto rule = dsl::p<BoolLiteralExpression> | dsl::p<FloatLiteralExpression> |
+                                     dsl::p<IntLiteralExpression> | dsl::p<StringLiteralExpression> |
                                      dsl::p<NullLiteralExpression> | dsl::p<UndefinedLiteralExpression> |
                                      dsl::p<UnitLiteralExpression>;
     };
@@ -176,12 +165,12 @@ export namespace atem::grammar {
 
     struct IntTypeExpression {
         static constexpr auto rule =
-                LEXY_LIT("Int") >> dsl::integer<std::uint64_t>(dsl::digits<>.no_leading_zero()) | keyword_isize;
+                keyword_int >> dsl::integer<std::uint64_t>(dsl::digits<>.no_leading_zero()) | keyword_isize;
     };
 
     struct UIntTypeExpression {
         static constexpr auto rule =
-                LEXY_LIT("UInt") >> dsl::integer<std::uint64_t>(dsl::digits<>.no_leading_zero()) | keyword_usize;
+                keyword_uint >> dsl::integer<std::uint64_t>(dsl::digits<>.no_leading_zero()) | keyword_usize;
     };
 
     struct FloatTypeExpression {
@@ -213,22 +202,155 @@ export namespace atem::grammar {
     };
 
     struct IdentifierTypeExpression {
-        static constexpr auto rule = identifier;
+        static constexpr auto rule = dsl::p<Identifier>;
     };
 
     struct TypeExpression {
         static constexpr auto rule = dsl::p<BuiltinTypeExpression> | dsl::p<IdentifierTypeExpression>;
     };
 
+    struct IdentifierExpression {
+        static constexpr auto rule = dsl::p<Identifier>;
+    };
+
     struct Expression;
+    struct ArithmeticExpression;
 
     struct BlockExpression {
         static constexpr auto whitespace = whitespace_or_comment;
         static constexpr auto rule = dsl::curly_bracketed.opt_list(dsl::recurse<Expression>);
     };
 
+    struct ParenthesizedExpression {
+        static constexpr auto rule = dsl::parenthesized(dsl::recurse<Expression>);
+    };
+
+    struct FunctionCallExpression {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = [] {
+            constexpr auto function_name = dsl::p<Identifier>;
+            constexpr auto function_parameter_list =
+                    dsl::parenthesized.opt_list(dsl::recurse<ArithmeticExpression>,
+                                                dsl::sep(dsl::comma).trailing_error<error::UnexpectedTrailingComma>);
+
+            return function_name + function_parameter_list;
+        }();
+    };
+
+    struct PrimaryExpression {
+        static constexpr auto rule = dsl::peek(dsl::p<Identifier> + dsl::lit_c<'('>) >> dsl::p<FunctionCallExpression> |
+                                     dsl::p<LiteralExpression> | dsl::p<IdentifierExpression> | dsl::p<TypeExpression> |
+                                     dsl::p<ParenthesizedExpression>;
+    };
+
+    struct ArithmeticExpression : lexy::expression_production {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto atom = dsl::p<PrimaryExpression>;
+
+        struct PrefixOp : dsl::prefix_op {
+            static constexpr auto op = dsl::op(dsl::lit_c<'-'>) / dsl::op(keyword_not) / dsl::op(dsl::lit_c<'~'>);
+            using operand = dsl::atom;
+        };
+
+        struct MultiplicativeOp : dsl::infix_op_left {
+            static constexpr auto op = dsl::op(dsl::lit_c<'*'>) / dsl::op(dsl::lit_c<'/'>) / dsl::op(dsl::lit_c<'%'>) /
+                                       dsl::op(LEXY_LIT("**"));
+            using operand = PrefixOp;
+        };
+
+        struct AdditiveOp : dsl::infix_op_left {
+            static constexpr auto op = dsl::op(dsl::lit_c<'+'>) / dsl::op(dsl::lit_c<'-'>);
+            using operand = MultiplicativeOp;
+        };
+
+        struct ShiftingOp : dsl::infix_op_left {
+            static constexpr auto op = dsl::op(LEXY_LIT("<<")) / dsl::op(LEXY_LIT(">>"));
+            using operand = AdditiveOp;
+        };
+
+        struct BinaryBitwiseOp : dsl::infix_op_left {
+            static constexpr auto op = dsl::op(dsl::lit_c<'&'>) / dsl::op(dsl::lit_c<'|'>) / dsl::op(dsl::lit_c<'^'>);
+            using operand = ShiftingOp;
+        };
+
+        struct RelationalOp : dsl::infix_op_left {
+            static constexpr auto op = dsl::op(LEXY_LIT("==")) / dsl::op(LEXY_LIT("!=")) / dsl::op(dsl::lit_c<'<'>) /
+                                       dsl::op(dsl::lit_c<'>'>) / dsl::op(LEXY_LIT("<=")) / dsl::op(LEXY_LIT(">="));
+            using operand = BinaryBitwiseOp;
+        };
+
+        struct LogicalAndOp : dsl::infix_op_left {
+            static constexpr auto op = dsl::op(keyword_and);
+            using operand = RelationalOp;
+        };
+
+        struct LogicalOrOp : dsl::infix_op_left {
+            static constexpr auto op = dsl::op(keyword_or);
+            using operand = LogicalAndOp;
+        };
+
+        struct AssignmentOp : dsl::infix_op_single {
+            static constexpr auto op = dsl::op(dsl::lit_c<'='>) / dsl::op(LEXY_LIT("+=")) / dsl::op(LEXY_LIT("-=")) /
+                                       dsl::op(LEXY_LIT("*=")) / dsl::op(LEXY_LIT("/=")) / dsl::op(LEXY_LIT("%=")) /
+                                       dsl::op(LEXY_LIT("**=")) / dsl::op(LEXY_LIT("&=")) / dsl::op(LEXY_LIT("|=")) /
+                                       dsl::op(LEXY_LIT("^=")) / dsl::op(LEXY_LIT("<<=")) / dsl::op(LEXY_LIT(">>="));
+            using operand = LogicalOrOp;
+        };
+
+        using operation = AssignmentOp;
+    };
+
+    struct IfExpression {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = [] {
+            constexpr auto if_cond = dsl::p<ArithmeticExpression>;
+            constexpr auto true_expr =
+                    dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> | keyword_then >> dsl::p<ArithmeticExpression>;
+            constexpr auto false_expr = dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> |
+                                        dsl::peek(keyword_if) >> dsl::recurse<IfExpression> |
+                                        dsl::else_ >> dsl::p<ArithmeticExpression>;
+
+            return keyword_if >> if_cond + true_expr + dsl::opt(keyword_else >> false_expr);
+        }();
+    };
+
+    struct ReturnExpression {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = keyword_return >> dsl::recurse<Expression>;
+    };
+
+    struct WhileExpression {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = [] {
+            constexpr auto while_cond = dsl::p<ArithmeticExpression>;
+            constexpr auto loop_expr =
+                    dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> | keyword_then >> dsl::p<ArithmeticExpression>;
+            constexpr auto else_expr =
+                    dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> | dsl::else_ >> dsl::p<ArithmeticExpression>;
+
+            return keyword_while >> while_cond + loop_expr + dsl::opt(keyword_else >> else_expr);
+        }();
+    };
+
+    struct BreakExpression {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = [] {
+            constexpr auto break_expr = keyword_break + dsl::p<ArithmeticExpression>;
+
+            return keyword_break | dsl::peek(keyword_break) >> break_expr;
+        }();
+    };
+
+    struct ContinueExpression {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = keyword_continue;
+    };
+
     struct Expression {
-        static constexpr auto rule = dsl::p<TypeExpression> | dsl::p<LiteralExpression>;
+        static constexpr auto rule =
+                dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> |
+                dsl::peek(keyword_if) >> dsl::p<IfExpression> | dsl::peek(keyword_while) >> dsl::p<WhileExpression> |
+                dsl::peek(keyword_return) >> dsl::p<ReturnExpression> | dsl::else_ >> dsl::p<ArithmeticExpression>;
     };
 
     struct FunctionArgumentList {
@@ -245,7 +367,7 @@ export namespace atem::grammar {
     struct FunctionDeclaration {
         static constexpr auto whitespace = whitespace_or_comment;
         static constexpr auto rule = [] {
-            constexpr auto function_name = identifier;
+            constexpr auto function_name = dsl::p<Identifier>;
             constexpr auto arguments = dsl::p<FunctionArgumentList>;
             constexpr auto return_type = dsl::p<TypeExpression>;
             constexpr auto body = dsl::p<BlockExpression>;

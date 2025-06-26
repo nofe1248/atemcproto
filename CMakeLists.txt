@@ -53,6 +53,9 @@ if(WIN32)
     )
 endif()
 
+set(MLIR_DIR "C:/llvm-project/build/lib/cmake/mlir/")
+set(LLVM_DIR "C:/llvm-project/build/lib/cmake/llvm/")
+
 # Find and link MLIR and LLVM
 find_package(MLIR REQUIRED CONFIG)
 

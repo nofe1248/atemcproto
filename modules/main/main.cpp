@@ -4,15 +4,15 @@ module;
 
 #include <libassert/assert.hpp>
 
-#include <lexy/input/file.hpp>
 #include <lexy/action/trace.hpp>
+#include <lexy/input/file.hpp>
 
 export module Atem.Main;
 
 import Atem.AST;
 import Atem.Parser.Grammar;
 
-export auto main(int const argc, char** argv) -> int {
+export auto main(int const argc, char **argv) -> int {
     if (argc < 2) {
         std::println("usage: %s <filename>", argv[0]);
         return 1;
@@ -24,6 +24,7 @@ export auto main(int const argc, char** argv) -> int {
         return 1;
     }
 
-    lexy::trace<atem::grammar::SourceFile>(stdout, file.buffer());
+    lexy::trace<atem::grammar::SourceFile>(stdout, file.buffer(),
+                                           {.flags = lexy::visualization_flags::visualize_use_color});
     return 0;
 }
