@@ -304,8 +304,8 @@ export namespace atem::grammar {
         static constexpr auto whitespace = whitespace_or_comment;
         static constexpr auto rule = [] {
             constexpr auto if_cond = dsl::p<ArithmeticExpression>;
-            constexpr auto true_expr =
-                    dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> | keyword_then >> dsl::p<ArithmeticExpression>;
+            constexpr auto true_expr = dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> |
+                                       keyword_then >> dsl::p<ArithmeticExpression>;
             constexpr auto false_expr = dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> |
                                         dsl::peek(keyword_if) >> dsl::recurse<IfExpression> |
                                         dsl::else_ >> dsl::p<ArithmeticExpression>;
@@ -323,8 +323,8 @@ export namespace atem::grammar {
         static constexpr auto whitespace = whitespace_or_comment;
         static constexpr auto rule = [] {
             constexpr auto while_cond = dsl::p<ArithmeticExpression>;
-            constexpr auto loop_expr =
-                    dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> | keyword_then >> dsl::p<ArithmeticExpression>;
+            constexpr auto loop_expr = dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> |
+                                       keyword_then >> dsl::p<ArithmeticExpression>;
             constexpr auto else_expr =
                     dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> | dsl::else_ >> dsl::p<ArithmeticExpression>;
 
@@ -346,43 +346,88 @@ export namespace atem::grammar {
         static constexpr auto rule = keyword_continue;
     };
 
-    struct Expression {
-        static constexpr auto rule =
-                dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> |
-                dsl::peek(keyword_if) >> dsl::p<IfExpression> | dsl::peek(keyword_while) >> dsl::p<WhileExpression> |
-                dsl::peek(keyword_return) >> dsl::p<ReturnExpression> | dsl::else_ >> dsl::p<ArithmeticExpression>;
+    struct FunctionDeclarationHeader {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = dsl::p<Identifier> + LEXY_LIT(":") + keyword_function;
     };
 
-    struct FunctionArgumentList {
+    struct FunctionDeclaration {
         static constexpr auto whitespace = whitespace_or_comment;
         static constexpr auto rule = [] {
             constexpr auto argument_name = identifier;
             [[maybe_unused]] constexpr auto argument_type = dsl::p<TypeExpression>;
             [[maybe_unused]] constexpr auto function_argument = argument_name + LEXY_LIT(":") + argument_type;
 
-            return dsl::parenthesized.opt_list(function_argument, dsl::sep(dsl::comma));
-        }();
-    };
+            constexpr auto argument_list = dsl::parenthesized.opt_list(function_argument, dsl::sep(dsl::comma));
 
-    struct FunctionDeclaration {
-        static constexpr auto whitespace = whitespace_or_comment;
-        static constexpr auto rule = [] {
-            constexpr auto function_name = dsl::p<Identifier>;
-            constexpr auto arguments = dsl::p<FunctionArgumentList>;
             constexpr auto return_type = dsl::p<TypeExpression>;
             constexpr auto body = dsl::p<BlockExpression>;
 
-            return dsl::position + function_name + LEXY_LIT(":") + keyword_function + arguments +
-                   dsl::opt(LEXY_LIT("->") >> return_type) + LEXY_LIT("=") + body;
+            return dsl::p<FunctionDeclarationHeader> + argument_list + dsl::opt(LEXY_LIT("->") >> return_type) +
+                   LEXY_LIT("=") + body;
         }();
     };
 
+    struct VariableDeclarationHeader {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = dsl::p<Identifier> + LEXY_LIT(":") + keyword_var;
+    };
+
+    struct VariableDeclaration {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = [] {
+            constexpr auto variable_initializer = dsl::recurse<Expression>;
+            constexpr auto variable_type = dsl::p<TypeExpression>;
+
+            return dsl::p<VariableDeclarationHeader> + variable_type + dsl::opt(dsl::lit_c<'='> >> variable_initializer);
+        }();
+    };
+
+    struct ConstantDeclarationHeader {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = dsl::p<Identifier> + LEXY_LIT(":") + keyword_const;
+    };
+
+    struct ConstantDeclaration {
+        static constexpr auto whitespace = whitespace_or_comment;
+        static constexpr auto rule = [] {
+            constexpr auto constant_initializer = dsl::recurse<Expression>;
+            constexpr auto constant_type = dsl::p<TypeExpression>;
+
+            return dsl::p<ConstantDeclarationHeader> + constant_type + dsl::lit_c<'='> + constant_initializer;
+        }();
+    };
+
+    struct Expression {
+        static constexpr auto rule =
+                dsl::peek(dsl::lit_c<'{'>) >> dsl::p<BlockExpression> |
+                dsl::peek(keyword_if) >> dsl::p<IfExpression> | dsl::peek(keyword_while) >> dsl::p<WhileExpression> |
+                dsl::peek(keyword_return) >> dsl::p<ReturnExpression> |
+                dsl::peek(dsl::p<FunctionDeclarationHeader>) >> dsl::p<FunctionDeclaration> |
+                dsl::peek(dsl::p<VariableDeclarationHeader>) >> dsl::p<VariableDeclaration> |
+                dsl::peek(dsl::p<ConstantDeclarationHeader>) >> dsl::p<ConstantDeclaration> |
+                dsl::else_ >> dsl::p<ArithmeticExpression>;
+    };
+
     struct Declaration {
-        static constexpr auto rule = dsl::p<FunctionDeclaration>;
+        static constexpr auto rule = dsl::peek(dsl::p<FunctionDeclarationHeader>) >> dsl::p<FunctionDeclaration> |
+                                     dsl::peek(dsl::p<VariableDeclarationHeader>) >> dsl::p<VariableDeclaration> |
+                                     dsl::peek(dsl::p<ConstantDeclarationHeader>) >> dsl::p<ConstantDeclaration>;
     };
 
     struct SourceFile {
         static constexpr auto whitespace = whitespace_or_comment;
-        static constexpr auto rule = dsl::terminator(dsl::eof).list(dsl::p<FunctionDeclaration>);
+        static constexpr auto rule = [] {
+            constexpr auto decl = dsl::p<Declaration>;
+
+            constexpr auto recoverable_decl =
+                    dsl::peek(dsl::p<FunctionDeclarationHeader>) >> dsl::p<FunctionDeclaration> |
+                    dsl::peek(dsl::p<VariableDeclarationHeader>) >> dsl::p<VariableDeclaration> |
+                    dsl::peek(dsl::p<ConstantDeclarationHeader>) >> dsl::p<ConstantDeclaration>;
+            constexpr auto decl_recover = dsl::recover(recoverable_decl);
+            constexpr auto try_decl = dsl::try_(decl, decl_recover);
+
+            return dsl::terminator(dsl::eof).list(try_decl);
+        }();
     };
 } // namespace atem::grammar
