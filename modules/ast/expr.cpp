@@ -103,7 +103,7 @@ export namespace atem::ast {
         Operator op;
         std::shared_ptr<Expr> operand;
 
-        static constexpr auto make(Operator const op, std::shared_ptr<Expr> operand) -> UnaryExpr {
+        [[nodiscard]] static constexpr auto make(Operator const op, std::shared_ptr<Expr> operand) -> UnaryExpr {
             ASSERT(op > Operator::OP_MINIMUM and op < Operator::OP_MAXIMUM,
                    "Invalid enum value for atem::ast::Operator", op);
             DEBUG_ASSERT(operand.get() != nullptr, "Invalid operand expression pointer for atem::ast::UnaryExpr");
@@ -116,8 +116,8 @@ export namespace atem::ast {
         std::shared_ptr<Expr> lhs;
         std::shared_ptr<Expr> rhs;
 
-        static constexpr auto make(Operator const op, std::shared_ptr<Expr> lhs, std::shared_ptr<Expr> rhs)
-                -> BinaryExpr {
+        [[nodiscard]] static constexpr auto make(Operator const op, std::shared_ptr<Expr> lhs,
+                                                 std::shared_ptr<Expr> rhs) -> BinaryExpr {
             ASSERT(op > Operator::OP_MINIMUM and op < Operator::OP_MAXIMUM,
                    "Invalid enum value for atem::ast::Operator", op);
             DEBUG_ASSERT(lhs.get() != nullptr, "Invalid lhs expression pointer for atem::ast::BinaryExpr");
@@ -126,10 +126,18 @@ export namespace atem::ast {
         }
     };
 
+    struct IdentifierExpr {
+        std::string identifier;
+
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const identifier) -> IdentifierExpr {
+            return IdentifierExpr{.identifier = identifier.str()};
+        }
+    };
+
     struct BlockExpr {
         llvm::SmallVector<std::shared_ptr<Expr>> expressions;
 
-        static constexpr auto make(llvm::SmallVector<std::shared_ptr<Expr>> expressions) -> BlockExpr {
+        [[nodiscard]] static constexpr auto make(llvm::SmallVector<std::shared_ptr<Expr>> expressions) -> BlockExpr {
             return BlockExpr{.expressions = std::move(expressions)};
         }
     };
@@ -138,7 +146,8 @@ export namespace atem::ast {
         std::string name;
         llvm::SmallVector<std::shared_ptr<Expr>> arguments;
 
-        static constexpr auto make(llvm::StringRef const name, llvm::SmallVector<std::shared_ptr<Expr>> arguments)
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const name,
+                                                 llvm::SmallVector<std::shared_ptr<Expr>> arguments)
                 -> FunctionCallExpr {
             ASSERT(not name.empty(), "Function name cannot be empty");
             return FunctionCallExpr{.name = name.str(), .arguments = std::move(arguments)};
@@ -150,8 +159,9 @@ export namespace atem::ast {
         std::shared_ptr<Expr> true_branch;
         std::optional<std::shared_ptr<Expr>> false_branch;
 
-        static constexpr auto make(std::shared_ptr<Expr> condition, std::shared_ptr<Expr> true_branch,
-                                   std::optional<std::shared_ptr<Expr>> false_branch = std::nullopt) -> IfExpr {
+        [[nodiscard]] static constexpr auto make(std::shared_ptr<Expr> condition, std::shared_ptr<Expr> true_branch,
+                                                 std::optional<std::shared_ptr<Expr>> false_branch = std::nullopt)
+                -> IfExpr {
             DEBUG_ASSERT(condition.get() != nullptr, "Invalid condition pointer for atem::ast::IfExpr");
             DEBUG_ASSERT(true_branch.get() != nullptr, "Invalid true_branch pointer for atem::ast::IfExpr");
             if (false_branch.has_value()) {
@@ -169,8 +179,9 @@ export namespace atem::ast {
         std::shared_ptr<Expr> body;
         std::optional<std::shared_ptr<Expr>> else_branch;
 
-        static constexpr auto make(std::shared_ptr<Expr> condition, std::shared_ptr<Expr> body,
-                                   std::optional<std::shared_ptr<Expr>> else_branch = std::nullopt) -> WhileExpr {
+        [[nodiscard]] static constexpr auto make(std::shared_ptr<Expr> condition, std::shared_ptr<Expr> body,
+                                                 std::optional<std::shared_ptr<Expr>> else_branch = std::nullopt)
+                -> WhileExpr {
             DEBUG_ASSERT(condition.get() != nullptr, "Invalid condition pointer for atem::ast::WhileExpr");
             DEBUG_ASSERT(body.get() != nullptr, "Invalid body pointer for atem::ast::WhileExpr");
             if (else_branch.has_value()) {
@@ -185,7 +196,7 @@ export namespace atem::ast {
     struct ReturnExpr {
         std::shared_ptr<Expr> expression;
 
-        static constexpr auto make(std::shared_ptr<Expr> expression) -> ReturnExpr {
+        [[nodiscard]] static constexpr auto make(std::shared_ptr<Expr> expression) -> ReturnExpr {
             DEBUG_ASSERT(expression.get() != nullptr, "Invalid expression pointer for atem::ast::ReturnExpr");
             return ReturnExpr{.expression = std::move(expression)};
         }
@@ -195,12 +206,18 @@ export namespace atem::ast {
         std::string name;
         llvm::SmallVector<TypeExpr> parameter_types;
         TypeExpr return_type;
+        std::shared_ptr<Expr> body;
 
-        static constexpr auto make(llvm::StringRef const name, llvm::SmallVector<TypeExpr> parameter_types,
-                                   TypeExpr const &return_type) -> FunctionDecl {
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const name,
+                                                 llvm::SmallVector<TypeExpr> parameter_types,
+                                                 TypeExpr const &return_type, std::shared_ptr<Expr> body)
+                -> FunctionDecl {
             ASSERT(not name.empty(), "Function name cannot be empty");
-            return FunctionDecl{
-                    .name = name.str(), .parameter_types = std::move(parameter_types), .return_type = return_type};
+            DEBUG_ASSERT(body.get() != nullptr, "Invalid body pointer for atem::ast::FunctionDecl");
+            return FunctionDecl{.name = name.str(),
+                                .parameter_types = std::move(parameter_types),
+                                .return_type = return_type,
+                                .body = std::move(body)};
         }
     };
 
@@ -209,8 +226,9 @@ export namespace atem::ast {
         TypeExpr type;
         std::optional<std::shared_ptr<Expr>> initializer;
 
-        static constexpr auto make(llvm::StringRef const name, TypeExpr const &type,
-                                   std::optional<std::shared_ptr<Expr>> initializer = std::nullopt) -> VariableDecl {
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const name, TypeExpr const &type,
+                                                 std::optional<std::shared_ptr<Expr>> initializer = std::nullopt)
+                -> VariableDecl {
             ASSERT(not name.empty(), "Variable name cannot be empty");
             if (initializer.has_value()) {
                 DEBUG_ASSERT(initializer.value() != nullptr, "Invalid initializer for atem::ast::VariableDecl", name);
@@ -224,20 +242,13 @@ export namespace atem::ast {
         TypeExpr type;
         std::shared_ptr<Expr> initializer;
 
-        static constexpr auto make(llvm::StringRef const name, TypeExpr const &type, std::shared_ptr<Expr> initializer)
-                -> ConstantDecl {
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const name, TypeExpr const &type,
+                                                 std::shared_ptr<Expr> initializer) -> ConstantDecl {
             ASSERT(not name.empty(), "Constant name cannot be empty");
             if (initializer) {
                 DEBUG_ASSERT(initializer.get() != nullptr, "Invalid initializer for atem::ast::ConstantDecl", name);
             }
             return ConstantDecl{.name = name.str(), .type = type, .initializer = std::move(initializer)};
-        }
-
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            std::string result = std::format("ConstantDecl at {:#018x}, name = {}", reinterpret_cast<uintptr_t>(this), this->name);
-            result.append("\tType = ").append(this->type.toString()).append("\n");
-            result.append("\tInitializer = ").append(utils::astToString(*this->initializer)).append("\n");
-            return result;
         }
     };
 
@@ -246,15 +257,11 @@ export namespace atem::ast {
     struct SourceFileAST {
         llvm::SmallVector<Decl> value;
 
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            std::string result;
-            for (auto const &decl : this->value) {
-                result.append(decl.toString()).append("\n");
-            }
-            return result;
+        [[nodiscard]] static constexpr auto make(llvm::SmallVector<Decl> const value) -> SourceFileAST {
+            return SourceFileAST{.value = std::move(value)};
         }
     };
 
-    struct Expr : utils::VariantASTBase<Expr, LiteralExpr, UnaryExpr, BinaryExpr, TypeExpr, Decl, BlockExpr,
-                                        FunctionCallExpr, IfExpr, WhileExpr, ReturnExpr> {};
+    struct Expr : utils::VariantASTBase<Expr, LiteralExpr, UnaryExpr, BinaryExpr, IdentifierExpr, TypeExpr, Decl,
+                                        BlockExpr, FunctionCallExpr, IfExpr, WhileExpr, ReturnExpr> {};
 } // namespace atem::ast

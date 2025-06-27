@@ -3,7 +3,8 @@ module;
 #include <cstdint>
 #include <format>
 #include <string>
-#include <utility>
+
+#include <llvm/ADT/StringRef.h>
 
 export module Atem.AST.Expr.Type;
 
@@ -11,36 +12,36 @@ import Atem.AST.Utils;
 
 export namespace atem::ast {
     struct BoolType {
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return std::format("BoolType at {:#018x}", reinterpret_cast<uintptr_t>(this));
+        [[nodiscard]] static constexpr auto make() -> BoolType {
+            return BoolType{};
         }
     };
     struct UnitType {
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return std::format("UnitType at {:#018x}", reinterpret_cast<uintptr_t>(this));
+        [[nodiscard]] static constexpr auto make() -> UnitType {
+            return UnitType{};
         }
     };
     struct NoreturnType {
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return std::format("NoreturnType at {:#018x}", reinterpret_cast<uintptr_t>(this));
+        [[nodiscard]] static constexpr auto make() -> NoreturnType {
+            return NoreturnType{};
         }
     };
     struct SignedIndexType {
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return std::format("SignedIndexType at {:#018x}", reinterpret_cast<uintptr_t>(this));
+        [[nodiscard]] static constexpr auto make() -> SignedIndexType {
+            return SignedIndexType{};
         }
     };
     struct UnsignedIndexType {
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return std::format("UnsignedIndexType at {:#018x}", reinterpret_cast<uintptr_t>(this));
+        [[nodiscard]] static constexpr auto make() -> UnsignedIndexType {
+            return UnsignedIndexType{};
         }
     };
     struct IntType {
         std::uint64_t width;
         bool sign;
 
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return std::format("IntType at {:#018x}, width = {}, sign = {}", reinterpret_cast<uintptr_t>(this), this->width, this->sign);
+        [[nodiscard]] static constexpr auto make(std::uint64_t const width, bool const sign) -> IntType {
+            return IntType{.width = width, .sign = sign};
         }
     };
     enum class FloatTypeWidth : std::uint8_t {
@@ -53,23 +54,28 @@ export namespace atem::ast {
     struct FloatType {
         FloatTypeWidth width;
 
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return std::format("FloatType at {:#018x}, width = {}", reinterpret_cast<uintptr_t>(this), std::to_underlying(this->width));
+        [[nodiscard]] static constexpr auto make(FloatTypeWidth const width) -> FloatType {
+            return FloatType{.width = width};
         }
     };
     struct StringType {
-        std::size_t length;
-
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return std::format("StringType at {:#018x}, length = {}", reinterpret_cast<uintptr_t>(this), this->length);
+        [[nodiscard]] static constexpr auto make() -> StringType {
+            return StringType{};
         }
     };
     struct RuneType {
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return std::format("RuneType at {:#018x}", reinterpret_cast<uintptr_t>(this));
+        [[nodiscard]] static constexpr auto make() -> RuneType {
+            return RuneType{};
         }
     };
     struct BuiltinTypeExpr : utils::VariantASTBase<BuiltinTypeExpr, BoolType, UnitType, NoreturnType, SignedIndexType,
-                                               UnsignedIndexType, IntType, FloatType, StringType, RuneType> {};
-    struct TypeExpr : utils::VariantASTBase<TypeExpr, BuiltinTypeExpr> {};
+                                                   UnsignedIndexType, IntType, FloatType, StringType, RuneType> {};
+    struct IdentifierType {
+        std::string identifier;
+
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const identifier) -> IdentifierType {
+            return IdentifierType{.identifier = identifier.str()};
+        }
+    };
+    struct TypeExpr : utils::VariantASTBase<TypeExpr, BuiltinTypeExpr, IdentifierType> {};
 } // namespace atem::ast

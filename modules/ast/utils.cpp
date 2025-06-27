@@ -50,7 +50,13 @@ export namespace atem::ast::utils {
 
     template<typename Derived, typename... VariantTypes>
     struct VariantASTBase {
+        using variant_ast_tag = void;
         std::variant<VariantTypes...> value;
+
+        template<typename T>
+            requires contain_type_v<T, VariantTypes...>
+        constexpr VariantASTBase(T &&t) : value{std::forward<T>(t)} {
+        }
 
         template<typename... Types>
         constexpr auto visit(Types &&...args) {
@@ -62,19 +68,10 @@ export namespace atem::ast::utils {
             return this->value.visit(OverloadSet(std::forward<Types>(args)..., [](auto &&) {}));
         }
 
-        [[nodiscard]] constexpr auto toString() const -> std::string {
-            return this->value.visit([]<typename T>(T &&value) { return std::forward<T>(value).toString(); });
-        }
-
         template<typename T>
             requires contain_type_v<T, VariantTypes...>
         static constexpr auto make(T &&t) -> Derived {
             return Derived{std::forward<T>(t)};
         }
     };
-
-    template<typename T>
-    constexpr auto astToString(T &&node) -> std::string {
-        return std::forward<T>(node).toString();
-    }
 } // namespace atem::ast::utils

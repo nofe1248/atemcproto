@@ -9,7 +9,6 @@ FetchContent_MakeAvailable(lexy)
 
 set(CMAKE_CXX_STANDARD 26)
 set(LIBASSERT_BUILD_SHARED ON)
-set(CMAKE_CXX_FLAGS "-stdlib=libc++")
 
 FetchContent_Declare(
     libassert
@@ -31,6 +30,7 @@ target_sources(
         modules/ast/literal_expr.cpp
         modules/ast/utils.cpp
         modules/ast/type.cpp
+        modules/ast/printer.cpp
         modules/mp/mp.cppm
 )
 

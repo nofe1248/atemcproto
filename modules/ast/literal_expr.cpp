@@ -7,7 +7,7 @@ module;
 
 #include <llvm/ADT/APFloat.h>
 #include <llvm/ADT/APInt.h>
-#include <llvm/ADT/StringRef.h>
+#include <llvm/ADT/SmallString.h>
 
 export module Atem.AST.Expr.LiteralExpr;
 
@@ -17,7 +17,7 @@ export namespace atem::ast {
     struct IntegerLiteral {
         llvm::APInt value;
 
-        static constexpr auto make(llvm::StringRef const value, std::uint8_t const radix) -> IntegerLiteral {
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const value, std::uint8_t const radix) -> IntegerLiteral {
             llvm::APInt const result(
                     static_cast<unsigned>(std::pow(2, std::ceil(std::log2(llvm::APInt::getBitsNeeded(value, radix))))),
                     value, radix);
@@ -28,7 +28,7 @@ export namespace atem::ast {
     struct FloatLiteral {
         llvm::APFloat value;
 
-        static constexpr auto make(llvm::StringRef const value, llvm::fltSemantics const &semantics) -> FloatLiteral {
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const value, llvm::fltSemantics const &semantics) -> FloatLiteral {
             llvm::APFloat const result(semantics, value);
             return FloatLiteral{.value = result};
         }
@@ -37,7 +37,7 @@ export namespace atem::ast {
     struct BoolLiteral {
         bool value;
 
-        static constexpr auto make(llvm::StringRef const value) -> BoolLiteral {
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const value) -> BoolLiteral {
             if (value == "true") {
                 return BoolLiteral{.value = true};
             }
@@ -49,13 +49,13 @@ export namespace atem::ast {
     };
 
     struct NullLiteral {
-        static constexpr auto make() -> NullLiteral {
+        [[nodiscard]] static constexpr auto make() -> NullLiteral {
             return NullLiteral{};
         }
     };
 
     struct UndefinedLiteral {
-        static constexpr auto make() -> UndefinedLiteral {
+        [[nodiscard]] static constexpr auto make() -> UndefinedLiteral {
             return UndefinedLiteral{};
         }
     };
@@ -63,7 +63,7 @@ export namespace atem::ast {
     struct StringLiteral {
         std::string value;
 
-        static constexpr auto make(llvm::StringRef const value) -> StringLiteral {
+        [[nodiscard]] static constexpr auto make(llvm::StringRef const value) -> StringLiteral {
             return StringLiteral{.value = value.str()};
         }
     };
